@@ -7,3 +7,6 @@ __pycache__/
 env/
 venv/
 
+# Vendor dependencies (installed via pip)
+maya_tools_hub/hub/vendor/thirdparty_libs/
+

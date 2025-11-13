@@ -29,10 +29,13 @@
 * **结束条件**：`from Qt import QtWidgets` 可导入；`run()` 存在且返回 `0`。
 * **步骤**：
 
-  1. 在 `hub/app.py` 定义 `run()`，内部仅 `return 0`。
-  2. 在 `hub_launcher.py` 中调用 `from hub.app import run; print(run())`。
-* **验收标准**：`python hub_launcher.py` 输出 `0`。
-* **产物**：可导入的 AppShell 占位。
+  1. 安装 Qt.py 到 `hub/vendor/thirdparty_libs/`（`pip install Qt.py --target hub/vendor/thirdparty_libs`）。
+  2. 在 `hub_launcher.py` 中优先添加 vendor 路径到 `sys.path`。
+  3. 创建 `hub/core/qt_import.py` 统一导入工具（优先使用 vendor 的 Qt.py，回退到 DCC 的 Qt 或 stub）。
+  4. 在 `hub/app.py` 定义 `run()`，内部仅 `return 0`。
+  5. 在 `hub_launcher.py` 中调用 `from hub.app import run; print(run())`。
+* **验收标准**：`python hub_launcher.py` 输出 `0`；vendor 中的 Qt.py 优先被使用。
+* **产物**：可导入的 AppShell 占位；Qt 导入工具；vendor 依赖管理。
 
 ---
 
@@ -71,8 +74,9 @@
 
   1. 在 `hub/ui/main_window.py` 定义 `MainWindow(QtWidgets.QWidget)`，`setWindowTitle("Hub MVP")`。
   2. 在 `app.run()`：`app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])` → 创建 `MainWindow` 并 `show()` → `app.exec_()`。
-* **验收标准**：Maya 中导入并调用 `hub.app.run()`，出现名为 “Hub MVP” 的窗体。
-* **产物**：Maya 内部 GUI 出窗。
+  3. 在 `hub_launcher.py` 中添加热重载功能：`reload_hub()` 清除 `sys.modules` 中的 hub 模块缓存，`run_with_reload()` 支持 `--reload` 参数。
+* **验收标准**：Maya 中导入并调用 `hub.app.run()`，出现名为 “Hub MVP” 的窗体。修改代码后使用 `python hub_launcher.py --reload` 或调用 `reload_hub()` 可看到最新更改。
+* **产物**：Maya 内部 GUI 出窗；热重载支持（开发时无需重启 Maya）。
 
 ---
 
