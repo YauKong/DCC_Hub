@@ -25,9 +25,13 @@ DCC_Hub/                               # 项目根目录
 ├─ architecture.md                     # 架构设计文档
 ├─ tasks.md                            # 任务清单（30个任务）
 ├─ task01-05_summary.md                # 任务01-05完成摘要（示例）
+├─ task06-16_summary.md                # 任务06-16完成摘要
+├─ task17-18_summary.md                # 任务17-18完成摘要
 ├─ maya_test_code.md                   # Maya测试代码文档（当前任务测试代码）
+├─ future_tasks.md                     # 未来任务与遗留问题记录
 ├─ initiation_prompt.md                # 开发指引（AI助手工作流程）
 ├─ summary_prompt.md                   # 摘要生成指引（用于生成_summary.md）
+├─ update_test_code_prompt.md          # 测试代码更新指引
 │
 maya_tools_hub/                        # Hub实现目录
 ├─ hub_launcher.py                     # 入口：环境检测、DCC识别、注入/启动、热重载支持
@@ -110,21 +114,41 @@ maya_tools_hub/                        # Hub实现目录
 
 3. maya_test_code.md
    - 当前任务的测试代码
-   - 包含验收标准和测试步骤
-   - 每次完成任务后更新
+   - 包含两大板块：测试代码和验收部分（测试步骤、验收标准）
+   - 每次完成任务后更新，只记录当前任务，不记录已完成任务
    - 用法：在Maya Script Editor中运行文档中的代码进行测试
+   - 更新方法：参考 update_test_code_prompt.md
 
-4. initiation_prompt.md
+4. future_tasks.md
+   - 未来任务与遗留问题记录文档
+   - 记录已完成任务中的遗留问题
+   - 记录未来需要修复或改进的任务
+   - 结构：
+     * 遗留问题：问题描述、当前状态、待修复内容、相关文件
+     * 未来改进任务：用于记录未来需要添加的功能或改进
+
+5. update_test_code_prompt.md
+   - 测试代码更新指引文档
+   - 说明如何更新 maya_test_code.md
+   - 要求：
+     * 确保有两大板块：测试代码和验收部分（测试步骤、验收标准）
+     * 不应记录已完成的任务，这应该放在summary中进行
+   - 包含更新模板和示例
+
+6. initiation_prompt.md
    - AI助手开发指引
    - 开发守则（CODING PROTOCOL）
    - 工作流程：阅读architecture.md和tasks.md → 按顺序完成任务 → 生成_summary.md
 
-5. summary_prompt.md
+7. summary_prompt.md
    - 摘要生成模板
    - 用于生成任务完成摘要（taskXX-YY_summary.md）
    - 包含：项目胶囊、约束、决策日志、待办事项、术语表
+   - 格式要求：严格使用指定结构与字数上限
 
-6. taskXX-YY_summary.md
+8. taskXX-YY_summary.md
    - 已完成任务的上下文摘要
    - 用于新会话快速上手
    - 命名规则：task起始编号-结束编号_summary.md（如task01-05_summary.md）
+   - 只总结当前对话的内容，不需要总结之前已完成的任务
+   - 保存在和architecture.md同级目录

@@ -1,0 +1,2 @@
+"""Smooth Normals plugin."""
+

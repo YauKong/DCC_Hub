@@ -1,0 +1,10 @@
+{
+  "key": "poly.smooth_normals",
+  "label": "Smooth Normals",
+  "category": "poly",
+  "entry": "hub.plugins.poly.smooth_normals.plugin:SmoothNormalsTool",
+  "ui": {
+    "panel": true
+  }
+}
+

@@ -9,6 +9,7 @@
 在开发的过程中，你会把已经完成的任务进行总结，并放在和architecture.md同级目录的以_summary.md为后缀的文件中。
 - 如果有_summary.md文件，则阅读距离最近的_summary.md文件，明确自己的目标和任务
 - 遇到无法解决的问题，尝试阅读之前的_summary.md文件	
+- 每次执行完任务时，更新maya_test_code.md
 
 
 ### CODING PROTOCOL ###
