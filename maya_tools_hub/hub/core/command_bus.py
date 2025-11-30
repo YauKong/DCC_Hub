@@ -1,4 +1,7 @@
 """CommandBus - synchronous command dispatch system."""
+from hub.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class CommandBus:
@@ -19,6 +22,7 @@ class CommandBus:
             func: Callable that accepts **kwargs
         """
         self._commands[name] = func
+        logger.debug(f"Registered command: {name}")
     
     def dispatch(self, name, **kwargs):
         """Dispatch a command by name.
@@ -34,8 +38,10 @@ class CommandBus:
             KeyError: If command is not registered
         """
         if name not in self._commands:
+            logger.error(f"Command '{name}' is not registered")
             raise KeyError(f"Command '{name}' is not registered")
         
+        logger.debug(f"Dispatching command: {name}")
         handler = self._commands[name]
         return handler(**kwargs)
 
