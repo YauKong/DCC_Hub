@@ -1,0 +1,2 @@
+"""Test error plugin package."""
+

@@ -1,0 +1,10 @@
+{
+  "key": "poly.test_error",
+  "label": "Test Error",
+  "category": "poly",
+  "entry": "hub.plugins.poly.test_error.plugin:TestErrorTool",
+  "ui": {
+    "panel": true
+  }
+}
+
