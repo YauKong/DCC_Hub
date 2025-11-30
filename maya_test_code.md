@@ -1,11 +1,13 @@
 # Maya 测试代码
 
-## 当前任务：任务 25 - JobCenter + AIGC Stub 流程打通
+## 当前任务：任务 26 - 面板：Home/Poly/Console 三页
 
 ### 验收标准
-- 新增 "假 AIGC 任务" 按钮，提交流程 → 2s 后回调完成
-- 事件 `aigc/done` 发布并出现在控制台
-- 按钮 → 等待 → 控制台出现 `aigc/done {job_id:...}`
+- 统一主 Tab：`Home`、`Poly`、`Console`
+- 三页存在且可切换
+- Home 页显示环境信息、AIGC 按钮
+- Poly 页动态添加 `SmoothNormals` 插件
+- Console 页订阅 EventBus 打印事件
 
 ### 测试代码
 
@@ -24,130 +26,122 @@ run_with_reload()
 
 **测试步骤**：
 
-#### 1. 打开 Hub 窗口并验证按钮存在
+#### 1. 验证三个页签存在且可切换
 
 1. 在 Maya 中运行代码，打开 Hub 窗口
 2. 确认窗口正常显示
-3. 切换到 "Home" 标签页
-4. 验证看到 "Submit Fake AIGC Job" 按钮
+3. 验证主窗口有三个页签：
+   - **Home** 页签
+   - **Poly** 页签
+   - **Console** 页签
+4. 点击每个页签，验证可以正常切换
+5. 确认切换时无错误日志
 
-#### 2. 提交 AIGC 任务
+#### 2. 验证 Home 页功能
 
-5. 点击 "Submit Fake AIGC Job" 按钮
-6. 观察以下现象：
+6. 切换到 **Home** 页签
+7. 验证页面内容：
+   - 显示 "Home" 标签
+   - 显示 "Submit Fake AIGC Job" 按钮
+8. 点击 "Submit Fake AIGC Job" 按钮
+9. 验证：
    - 按钮点击后立即响应
-   - Console 标签页出现提示：`[INFO] AIGC job submitted, please wait...`
-   - Maya UI 保持响应，可以自由操作：
-     - 切换标签页
-     - 移动视图
-     - 选择物体
+   - Maya UI 保持响应（非阻塞）
 
-#### 3. 等待任务完成
+#### 3. 验证 Poly 页功能
 
-7. 等待约 2 秒
-8. 切换到 "Console" 标签页（如果不在的话）
-9. 观察以下输出：
-   - 看到 `[aigc/done]` 事件记录
-   - 包含 job_id、inputs、status 等信息
-   - 格式化的 JSON 输出
+10. 切换到 **Poly** 页签
+11. 验证页面内容：
+    - 动态加载了 "Smooth Normals" 插件
+    - 插件有标签显示 "Smooth Normals"
+    - 插件有控件：角度输入框 + 按钮
+    - 有分隔线分隔不同插件
+12. 在 Maya 场景中创建一个立方体（polyCube）
+13. 选中立方体
+14. 在 Smooth Normals 插件中：
+    - 设置角度值（如 60°）
+    - 点击 "Smooth Normals" 按钮
+15. 验证：
+    - 工具正常执行
+    - Console 页签显示 `tool/done` 事件
 
-#### 4. 验证多次提交
+#### 4. 验证 Console 页功能
 
-10. 再次点击 "Submit Fake AIGC Job" 按钮
-11. 验证可以多次提交任务
-12. 每次任务都正确完成并显示结果
+16. 切换到 **Console** 页签
+17. 验证页面内容：
+    - 有文本编辑框显示事件日志
+    - 占位符文本："Event log will appear here..."
+18. 切换回 **Home** 页签
+19. 点击 "Submit Fake AIGC Job" 按钮
+20. 切换到 **Console** 页签
+21. 验证：
+    - 立即显示提交确认消息
+    - 2 秒后显示 `[aigc/done]` 事件
+    - 显示完整的 AIGC 任务信息（job_id、inputs、status）
+    - JSON 格式缩进美观
+22. 切换回 **Poly** 页签
+23. 执行 Smooth Normals 工具
+24. 切换到 **Console** 页签
+25. 验证：
+    - 显示 `[tool/done]` 事件
+    - 包含工具 key 和参数信息
+
+#### 5. 验证模块化结构
+
+26. 验证日志输出（Maya Script Editor）：
+    - `[hub.ui.main_window] MainWindow initialized with modular panels`
+    - `[hub.ui.panels.panel_home] Added AIGC test button to Home panel`
+    - `[hub.ui.widgets.console] Console subscribed to tool/done, tool/failed, job/done, and aigc/done events`
+    - `[hub.ui.panels.panel_poly] Loading plugin UI: poly.smooth_normals`
+27. 确认无导入错误或模块找不到的错误
 
 **验收标准**：
 
-1. **UI 按钮**
-   - Home 标签页显示 "Submit Fake AIGC Job" 按钮
-   - 按钮样式正常，可点击
+1. **三页存在且可切换**
+   - Home、Poly、Console 三个页签都正常显示
+   - 点击页签可以正常切换
+   - 切换时无错误
 
-2. **任务提交**
-   - 点击按钮后立即返回（非阻塞）
-   - Console 显示提交确认消息
-   - Maya UI 完全可用，不会冻结
+2. **Home 页功能**
+   - 显示 "Home" 标签
+   - 显示 "Submit Fake AIGC Job" 按钮
+   - 按钮点击正常，不阻塞 Maya UI
+   - 使用模块化的 `HomePanel` 类
 
-3. **后台执行**
-   - 任务在后台线程执行
-   - AIGC Client 的 submit() 和 poll() 方法被调用
-   - 日志显示完整的执行流程
+3. **Poly 页功能**
+   - 动态加载 Poly 类别插件
+   - 显示 "Smooth Normals" 插件 UI
+   - 插件控件正常工作
+   - 使用模块化的 `PolyPanel` 类
 
-4. **事件发布**
-   - 2 秒后 `job/done` 事件发布
-   - 检测到 AIGC 任务，自动发布 `aigc/done` 事件
-   - Console 显示格式化的 AIGC 完成信息
+4. **Console 页功能**
+   - 显示事件日志文本框
+   - 订阅 `tool/done`, `tool/failed`, `job/done`, `aigc/done` 事件
+   - 格式化显示事件信息
+   - 自动滚动到最新消息
+   - 使用模块化的 `ConsoleWidget` 类
 
-5. **Console 显示**
-   - 显示 `[aigc/done]` 标题
-   - 显示 job_id
-   - 显示 inputs（prompt、style、resolution）
-   - 显示 status（state、progress、result）
-   - JSON 格式缩进美观
+5. **代码结构**
+   - `main_window.py` 简洁（约100行），只负责组装面板
+   - `panel_home.py` 独立模块，包含 AIGC 按钮逻辑
+   - `panel_poly.py` 独立模块，包含插件加载逻辑
+   - `console.py` 独立模块，包含事件订阅和显示逻辑
+   - `panels/__init__.py` 和 `widgets/__init__.py` 存在
 
-**测试日志示例**：
-
-```
-[17:00:00] [INFO    ] [hub.ui.main_window] AIGC job submission requested
-[17:00:00] [INFO    ] [hub.core.job_center] Submitting job to background thread: aigc_job
-[17:00:00] [DEBUG   ] [hub.core.job_center] Starting worker thread
-[INFO] AIGC job submitted, please wait...
-
-[17:00:00] [DEBUG   ] [hub.core.job_center] Worker thread starting: <function aigc_job>
-[17:00:00] [INFO    ] [hub.ui.main_window] AIGC job started in background thread
-[17:00:00] [INFO    ] [hub.services.aigc_client] AigcClientStub.submit() called with inputs: {'prompt': 'Generate a sci-fi spaceship model', 'style': 'realistic', 'resolution': '2048x2048'}
-[17:00:00] [INFO    ] [hub.ui.main_window] AIGC job submitted: job_a1b2c3d4
-
-(等待 2 秒，Maya UI 完全可用)
-
-[17:00:02] [INFO    ] [hub.services.aigc_client] AigcClientStub.poll() called with job_id: job_a1b2c3d4
-[17:00:02] [INFO    ] [hub.ui.main_window] AIGC job completed: job_a1b2c3d4
-[17:00:02] [DEBUG   ] [hub.core.job_center] Worker thread completed successfully
-[17:00:02] [INFO    ] [hub.core.job_center] Job completed successfully, result: {'job_id': 'job_a1b2c3d4', ...}
-[17:00:02] [DEBUG   ] [hub.core.job_center] Published job/done event
-[17:00:02] [DEBUG   ] [hub.ui.main_window] Received job/done event: {...}
-[17:00:02] [INFO    ] [hub.ui.main_window] Detected AIGC job completion, publishing aigc/done event
-[17:00:02] [INFO    ] [hub.ui.main_window] AIGC job completed: job_a1b2c3d4
-
-[aigc/done] AIGC Job Completed
-  job_id: job_a1b2c3d4
-  inputs: {
-    "prompt": "Generate a sci-fi spaceship model",
-    "style": "realistic",
-    "resolution": "2048x2048"
-  }
-  status: {
-    "state": "completed",
-    "progress": 100,
-    "result": {
-      "output_path": "/fake/path/to/result.obj",
-      "message": "Fake AIGC job completed successfully"
-    }
-  }
-
-[17:00:02] [DEBUG   ] [hub.ui.main_window] Displayed aigc/done event for job_a1b2c3d4
-[17:00:02] [DEBUG   ] [hub.core.job_center] Cleaning up worker thread
-```
-
-**流程说明**：
-
-1. **用户点击按钮** → UI 层
-2. **创建 aigc_job 函数** → 包含 AIGC submit + sleep + poll 逻辑
-3. **提交到 JobCenter** → 在后台线程异步执行
-4. **AIGC Client 调用** → 记录日志，返回假数据
-5. **job/done 事件** → JobCenter 发布，包含完整结果
-6. **aigc/done 事件** → MainWindow 检测并转发
-7. **Console 显示** → 格式化显示 AIGC 任务结果
+6. **事件流转**
+   - AIGC 任务：Home 按钮 → JobCenter → aigc/done → Console 显示
+   - 工具执行：Poly 插件 → tool.execute → tool/done → Console 显示
+   - 所有事件都正确显示在 Console 页签
 
 **成功标志**：
-- ✅ UI 不冻结（后台线程工作）
-- ✅ 日志完整（从提交到完成）
-- ✅ 事件流转（job/done → aigc/done）
-- ✅ Console 显示美观（格式化 JSON）
-- ✅ 可重复执行（资源正确清理）
+- ✅ 三页独立模块化（不再硬编码在 MainWindow）
+- ✅ MainWindow 代码精简（从 357 行减少到约 100 行）
+- ✅ 面板可复用（易于添加新页签）
+- ✅ 职责分离清晰（UI 组装 vs 业务逻辑）
+- ✅ 所有现有功能正常工作（AIGC、插件、事件）
 
 **注意事项**：
-- 这是 stub 实现，AIGC 服务返回假数据
-- 实际 AIGC 集成时需要替换为真实的 HTTP/gRPC 客户端
-- 2 秒延迟仅用于演示异步效果
-- 真实场景中 AIGC 任务可能需要几分钟
+- 这是 UI 重构任务，不改变功能逻辑
+- 所有已有功能（任务 25）应保持正常工作
+- Console widget 被 HomePanel 引用，需先创建
+- 面板使用独立的 Python 模块，便于未来扩展
