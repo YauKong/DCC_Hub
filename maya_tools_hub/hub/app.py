@@ -16,15 +16,23 @@ except ImportError:
 
 from hub.core.command_bus import CommandBus
 from hub.core.event_bus import EventBus
+from hub.core.job_center import JobCenter
+from hub.core.logging import get_logger, set_console_widget
 from hub.core.plugins import BaseToolPlugin, ToolContext
 from hub.core.registry import ToolRegistry
 from hub.core.settings import Settings
 from hub.core.state_store import StateStore
 from hub.dcc.maya_backend import MayaFacade
+from hub.services.aigc_client import AigcClientStub
+from hub.services.hda_bridge import HdaBridgeStub
 from hub.ui.main_window import MainWindow
+
+logger = get_logger(__name__)
 
 # 模块级变量：保持窗口引用，避免被垃圾回收
 _window_instance = None
+# 模块级变量：保持 state 引用，避免 reload 时丢失
+_state_instance = None
 
 
 def get_maya_main_window():
@@ -61,10 +69,10 @@ def get_maya_main_window():
             # MQtUtil.mainWindow() returns a long in Python 2 or int in Python 3
             ptr = int(main_window_ptr)
             main_window = wrap_instance(ptr, QtWidgets.QWidget)
-            print(f"[App] Got Maya main window as parent: {main_window}")
+            logger.info(f"Got Maya main window as parent: {main_window}")
             return main_window
     except (ImportError, AttributeError, TypeError) as e:
-        print(f"[App] Could not get Maya main window: {e}")
+        logger.warning(f"Could not get Maya main window: {e}")
     
     return None
 
@@ -80,39 +88,50 @@ def detect_dcc():
 
 def run() -> int:
     """AppShell entry point - creates and shows main window."""
-    global _window_instance
+    global _window_instance, _state_instance
+    
+    logger.info("Starting Hub application")
     
     dcc = detect_dcc()
-    print(f"DCC: {dcc.name}")
+    logger.info(f"DCC detected: {dcc.name}")
     
     # Initialize CommandBus
+    logger.debug("Initializing CommandBus")
     cmd_bus = CommandBus()
     
     # Register echo command
     def echo_handler(msg):
         """Echo command handler - prints the message."""
-        print(msg)
+        logger.debug(f"Echo command: {msg}")
         return msg
     
     cmd_bus.register("echo", echo_handler)
+    logger.debug("Registered 'echo' command")
     
     # Test echo command
     result = cmd_bus.dispatch("echo", msg="hi")
     
     # Initialize EventBus
+    logger.debug("Initializing EventBus")
     evt_bus = EventBus()
     
     # Subscribe to test topic
     def test_handler(payload):
         """Test event handler - prints ok value from payload."""
-        print(f"ok:{payload.get('ok', 'N/A')}")
+        logger.debug(f"Test event received: ok={payload.get('ok', 'N/A')}")
     
     evt_bus.subscribe("mvp/test", test_handler)
     
     # Publish test event
     evt_bus.publish("mvp/test", {"ok": 1})
     
+    # Initialize JobCenter
+    logger.debug("Initializing JobCenter")
+    job_center = JobCenter(event_bus=evt_bus)
+    logger.info("JobCenter initialized and connected to EventBus")
+    
     # Initialize Settings
+    logger.debug("Initializing Settings")
     settings = Settings()
     
     # Test settings: set, save, load
@@ -122,18 +141,31 @@ def run() -> int:
     
     # Verify settings
     theme = settings.get("ui.theme", "light")
-    print(f"Settings loaded: ui.theme = {theme}")
+    logger.info(f"Settings loaded: ui.theme = {theme}")
     
-    # Initialize StateStore
-    state = StateStore()
+    # Initialize StateStore - reuse existing instance if available (for reload support)
+    if _state_instance is None:
+        _state_instance = StateStore()
+        logger.debug("Created new StateStore instance")
+    else:
+        logger.debug("Reusing existing StateStore instance (preserved across reload)")
+    state = _state_instance
     
     # Test state: set and retrieve
     state["last_panel"] = "home"
     last_panel = state.get("last_panel", "unknown")
-    print(f"State retrieved: last_panel = {last_panel}")
+    logger.debug(f"State retrieved: last_panel = {last_panel}")
+    
+    # Initialize Services
+    logger.debug("Initializing Services")
+    services = {
+        "aigc": AigcClientStub(),
+        "hda": HdaBridgeStub()
+    }
+    logger.info(f"Services initialized: {list(services.keys())}")
     
     # Test ToolContext and BaseToolPlugin
-    ctx = ToolContext(dcc, settings, state, cmd_bus, evt_bus, job_center=None, services=None)
+    ctx = ToolContext(dcc, settings, state, cmd_bus, evt_bus, job_center=job_center, services=services)
     
     # Create a test plugin subclass
     class TestPlugin(BaseToolPlugin):
@@ -144,20 +176,17 @@ def run() -> int:
             return None
     
     test_plugin = TestPlugin(ctx)
-    print(f"Plugin instantiated: {type(test_plugin).__name__}")
+    logger.debug(f"Test plugin instantiated: {type(test_plugin).__name__}")
     
     # Test ToolRegistry
+    logger.debug("Initializing ToolRegistry")
     registry = ToolRegistry()
     tools = registry.list_tools()
-    print(f"Discovered tools: {tools}")
-    
-    # Test plugin discovery (no instantiation or execution)
-    if tools:
-        print(f"Discovered {len(tools)} plugin(s): {tools}")
+    logger.info(f"Discovered {len(tools)} plugin(s): {tools}")
     
     # Register tool.execute command in CommandBus
     def tool_execute_handler(key, **kwargs):
-        """Command handler for tool execution.
+        """Command handler for tool execution with exception handling.
         
         Args:
             key: Plugin key (e.g., "poly.smooth_normals")
@@ -166,12 +195,13 @@ def run() -> int:
         Returns:
             Result from plugin.execute()
         """
-        print(f"[CommandBus] Dispatching tool.execute for key: {key}, kwargs: {kwargs}")
+        logger.info(f"Dispatching tool.execute for key: {key}, kwargs: {kwargs}")
         try:
             # Instantiate plugin and execute
             plugin_instance, manifest = registry.instantiate(key, ctx)
+            logger.debug(f"Executing plugin: {key}")
             result = plugin_instance.execute(**kwargs)
-            print(f"[CommandBus] Tool execution completed for key: {key}")
+            logger.info(f"Tool execution completed for key: {key}")
             
             # Publish tool/done event
             payload = {
@@ -180,17 +210,36 @@ def run() -> int:
                 "kwargs": kwargs
             }
             evt_bus.publish("tool/done", payload)
-            print(f"[CommandBus] Published tool/done event for key: {key}")
+            logger.debug(f"Published tool/done event for key: {key}")
             
             return result
         except Exception as e:
-            print(f"[CommandBus] Error executing tool '{key}': {e}")
-            import traceback
-            traceback.print_exc()
+            # Log error with full stack trace
+            logger.error(f"Error executing tool '{key}': {e}", exc_info=True)
+            
+            # Get plugin label for user-friendly error message
+            manifest = registry.get_manifest(key)
+            plugin_label = manifest.get("label", key) if manifest else key
+            
+            # Show user-friendly error message
+            error_msg = f"Error in {plugin_label}: {str(e)}"
+            dcc.show_message(error_msg, level="error")
+            
+            # Publish tool/failed event
+            failed_payload = {
+                "key": key,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "kwargs": kwargs
+            }
+            evt_bus.publish("tool/failed", failed_payload)
+            logger.debug(f"Published tool/failed event for key: {key}")
+            
+            # Re-raise the exception to maintain error propagation
             raise
     
     cmd_bus.register("tool.execute", tool_execute_handler)
-    print("[App] Registered 'tool.execute' command in CommandBus")
+    logger.debug("Registered 'tool.execute' command in CommandBus")
     
     # Get or create QApplication instance
     # In Maya, QApplication already exists, so instance() returns it
@@ -205,13 +254,13 @@ def run() -> int:
             # 检查窗口是否仍然有效（未被销毁）
             if hasattr(_window_instance, 'isVisible') and _window_instance.isVisible():
                 # 窗口已存在且可见，不需要创建新的
-                print("[App] Window already exists and is visible, skipping creation")
+                logger.debug("Window already exists and is visible, skipping creation")
                 _window_instance.raise_()
                 _window_instance.activateWindow()
                 return 0
             else:
                 # 窗口存在但不可见，显示它
-                print("[App] Window exists but not visible, showing it")
+                logger.debug("Window exists but not visible, showing it")
                 _window_instance.show()
                 if QtCore and hasattr(QtCore.Qt, 'WA_ShowOnScreen'):
                     try:
@@ -220,45 +269,42 @@ def run() -> int:
                         pass
                 _window_instance.raise_()
                 _window_instance.activateWindow()
-                print(f"[App] Window shown, visible: {_window_instance.isVisible()}")
+                logger.debug(f"Window shown, visible: {_window_instance.isVisible()}")
                 return 0
         except Exception as e:
             # 窗口对象已失效，需要创建新的
-            print(f"[App] Existing window instance is invalid: {e}, creating new one")
+            logger.warning(f"Existing window instance is invalid: {e}, creating new one")
             _window_instance = None
     
     # Get Maya main window as parent
     maya_parent = get_maya_main_window()
-    print(f"[App] Creating MainWindow with parent: {maya_parent}")
+    logger.debug(f"Creating MainWindow with parent: {maya_parent}")
     
     # Create main window
     _window_instance = MainWindow(registry=registry, context=ctx, parent=maya_parent)
-    print(f"[App] MainWindow created: {_window_instance}")
+    logger.info("MainWindow created successfully")
+    
+    # Set console widget for logging
+    if hasattr(_window_instance, 'console_text'):
+        set_console_widget(_window_instance.console_text)
+        logger.debug("Console widget connected to logging system")
     
     # Set window attribute to ensure it shows on screen
     if QtCore and hasattr(QtCore.Qt, 'WA_ShowOnScreen'):
         try:
             _window_instance.setAttribute(QtCore.Qt.WA_ShowOnScreen, True)
-            print("[App] Set WA_ShowOnScreen attribute")
+            logger.debug("Set WA_ShowOnScreen attribute")
         except Exception as e:
-            print(f"[App] Could not set WA_ShowOnScreen: {e}")
+            logger.warning(f"Could not set WA_ShowOnScreen: {e}")
     
     # Show the window
     _window_instance.show()
-    print(f"[App] Window shown, visible: {_window_instance.isVisible()}")
+    logger.debug(f"Window shown, visible: {_window_instance.isVisible()}")
     
     # Bring window to front (important when parent is Maya main window)
     _window_instance.raise_()
     _window_instance.activateWindow()
-    print(f"[App] Window raised and activated, visible: {_window_instance.isVisible()}")
-    
-    # Additional debug info
-    if hasattr(_window_instance, 'windowFlags'):
-        print(f"[App] Window flags: {_window_instance.windowFlags()}")
-    if hasattr(_window_instance, 'parent'):
-        print(f"[App] Window parent: {_window_instance.parent()}")
-    if hasattr(_window_instance, 'geometry'):
-        print(f"[App] Window geometry: {_window_instance.geometry()}")
+    logger.info("Hub window displayed successfully")
     
     # In Maya, event loop is already running, so exec_() is not needed
     # For standalone testing with stub, exec_() is a no-op anyway
